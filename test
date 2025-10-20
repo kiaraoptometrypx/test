@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <h3>Test Save → Google Sheet</h3>
+
+  <label>Name: <input id="t-name"></label><br><br>
+  <label>Note: <input id="t-note"></label><br><br>
+
+  <button onclick="preview()">Preview</button>
+  <div id="prev" style="margin:10px 0;"></div>
+
+  <button onclick="save()">Save</button>
+
+<script>
+const SHEET_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
+let data = {};
+
+function preview(){
+  data = {
+    Name: document.getElementById('t-name').value || "",
+    Note: document.getElementById('t-note').value || ""
+  };
+  document.getElementById('prev').innerHTML =
+    `<table border="1" style="border-collapse:collapse">
+      <tr><th>Field</th><th>Value</th></tr>
+      ${Object.entries(data).map(([k,v])=>`<tr><td>${k}</td><td>${v||"-"}</td></tr>`).join("")}
+     </table>`;
+}
+
+async function save(){
+  if(!data.Name) return alert("Add Name, then Preview.");
+  try{
+    const body = new URLSearchParams({ data: JSON.stringify(data) });
+    await fetch(SHEET_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type":"application/x-www-form-urlencoded;charset=UTF-8" },
+      body
+    });
+    alert("Sent. Check sheet.");
+  }catch(e){
+    alert("Error: "+e.message);
+  }
+}
+</script>
+</body>
+</html>

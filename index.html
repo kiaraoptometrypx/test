@@ -1,46 +1,66 @@
 <!DOCTYPE html>
-<html>
-<body>
-  <h3>Test Save → Google Sheet</h3>
-
-  <label>Name: <input id="t-name"></label><br><br>
-  <label>Note: <input id="t-note"></label><br><br>
-
-  <button onclick="preview()">Preview</button>
-  <div id="prev" style="margin:10px 0;"></div>
-
-  <button onclick="save()">Save</button>
-
-<script>
-const SHEET_URL = "https://script.google.com/macros/s/AKfycbwTWisroz7nXlA-JUmswY7phY31fo2wJGDOopRq5KmDFl3LsbjtDC6CHGW5SYdpzN3_/exec";
-let data = {};
-
-function preview(){
-  data = {
-    Name: document.getElementById('t-name').value || "",
-    Note: document.getElementById('t-note').value || ""
-  };
-  document.getElementById('prev').innerHTML =
-    `<table border="1" style="border-collapse:collapse">
-      <tr><th>Field</th><th>Value</th></tr>
-      ${Object.entries(data).map(([k,v])=>`<tr><td>${k}</td><td>${v||"-"}</td></tr>`).join("")}
-     </table>`;
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simple OCR Reader</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #f7f7f7;
+  padding: 40px;
+  color: #333;
 }
+.container {
+  max-width: 600px;
+  margin: auto;
+  background: white;
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+button {
+  background: #009879;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+button:hover { background: #007a63; }
+pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: #fafafa;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  margin-top: 15px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h2>Image to Text (OCR)</h2>
+  <input type="file" id="imageInput" accept="image/*"><br>
+  <button onclick="extractText()">Extract Text</button>
+  <pre id="result">No text extracted yet.</pre>
+</div>
 
-async function save(){
-  if(!data.Name) return alert("Add Name, then Preview.");
-  try{
-    const body = new URLSearchParams({ data: JSON.stringify(data) });
-    await fetch(SHEET_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type":"application/x-www-form-urlencoded;charset=UTF-8" },
-      body
-    });
-    alert("Sent. Check sheet.");
-  }catch(e){
-    alert("Error: "+e.message);
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+async function extractText() {
+  const file = document.getElementById('imageInput').files[0];
+  if (!file) {
+    alert("Please choose an image first.");
+    return;
   }
+  document.getElementById('result').textContent = "Reading text... please wait.";
+  const { data: { text } } = await Tesseract.recognize(file, 'eng', {
+    logger: info => console.log(info)
+  });
+  document.getElementById('result').textContent = text.trim() || "No text found.";
 }
 </script>
 </body>

@@ -3,64 +3,99 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Simple OCR Reader</title>
+<title>OCR with Crop & Enhanced Accuracy</title>
 <style>
-body {
-  font-family: Arial, sans-serif;
-  background: #f7f7f7;
-  padding: 40px;
-  color: #333;
-}
+body {font-family:Arial, sans-serif; background:#f7f7f7; padding:40px; color:#333;}
 .container {
-  max-width: 600px;
-  margin: auto;
-  background: white;
-  padding: 20px 30px;
-  border-radius: 12px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  max-width:720px; margin:auto; background:white; padding:25px 30px;
+  border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.1);
 }
+canvas {max-width:100%; border:1px solid #ccc; border-radius:8px; cursor:crosshair;}
 button {
-  background: #009879;
-  color: white;
-  border: none;
-  padding: 10px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-top: 10px;
+  background:#009879; color:white; border:none; padding:10px 16px;
+  border-radius:6px; cursor:pointer; margin:8px 6px 0 0;
 }
-button:hover { background: #007a63; }
-pre {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  background: #fafafa;
-  padding: 15px;
-  border-radius: 8px;
-  border: 1px solid #ddd;
-  margin-top: 15px;
-}
+button:hover{background:#007a63;}
+#progress{margin-top:10px; width:100%; height:6px; background:#ddd; border-radius:4px; overflow:hidden;}
+#bar{width:0%; height:100%; background:#009879;}
+pre{white-space:pre-wrap; word-wrap:break-word; background:#fafafa; padding:15px; border-radius:8px; border:1px solid #ddd; margin-top:15px;}
 </style>
 </head>
 <body>
 <div class="container">
-  <h2>Image to Text (OCR)</h2>
+  <h2>Image to Text (OCR) — Crop + Enhanced Accuracy</h2>
   <input type="file" id="imageInput" accept="image/*"><br>
-  <button onclick="extractText()">Extract Text</button>
+  <canvas id="canvas"></canvas><br>
+  <button onclick="extractCropped()">Extract Cropped Text</button>
+  <div id="progress"><div id="bar"></div></div>
   <pre id="result">No text extracted yet.</pre>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
-async function extractText() {
-  const file = document.getElementById('imageInput').files[0];
-  if (!file) {
-    alert("Please choose an image first.");
-    return;
-  }
-  document.getElementById('result').textContent = "Reading text... please wait.";
-  const { data: { text } } = await Tesseract.recognize(file, 'eng', {
-    logger: info => console.log(info)
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let img = new Image(), startX, startY, endX, endY, dragging=false;
+
+// === Load image ===
+document.getElementById('imageInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  img.src = URL.createObjectURL(file);
+  img.onload = ()=>{
+    canvas.width = img.width > 700 ? 700 : img.width;
+    const scale = canvas.width / img.width;
+    canvas.height = img.height * scale;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  };
+});
+
+// === Crop rectangle ===
+canvas.addEventListener('mousedown', e=>{
+  const rect = canvas.getBoundingClientRect();
+  startX = e.clientX - rect.left;
+  startY = e.clientY - rect.top;
+  dragging = true;
+});
+canvas.addEventListener('mousemove', e=>{
+  if(!dragging) return;
+  const rect = canvas.getBoundingClientRect();
+  endX = e.clientX - rect.left;
+  endY = e.clientY - rect.top;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = 'red';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(startX, startY, endX-startX, endY-startY);
+});
+canvas.addEventListener('mouseup', ()=>dragging=false);
+
+// === OCR extraction ===
+async function extractCropped(){
+  const resEl = document.getElementById('result');
+  if(!endX || !endY){alert('Draw a crop box first.'); return;}
+  resEl.textContent = 'Reading text... please wait.';
+
+  // create cropped region
+  const w = Math.abs(endX - startX), h = Math.abs(endY - startY);
+  const x = Math.min(startX, endX), y = Math.min(startY, endY);
+  const crop = document.createElement('canvas');
+  crop.width = w; crop.height = h;
+  const cctx = crop.getContext('2d');
+  cctx.filter = 'contrast(150%) brightness(110%) grayscale(100%)';
+  cctx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+
+  // OCR
+  const { data:{ text } } = await Tesseract.recognize(crop.toDataURL('image/png'), 'eng+osd', {
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0_best/',
+    logger: info=>{
+      if(info.status === 'recognizing text'){
+        document.getElementById('bar').style.width = Math.round(info.progress*100)+'%';
+      }
+    }
   });
-  document.getElementById('result').textContent = text.trim() || "No text found.";
+  let clean = text.replace(/[^A-Za-z0-9+.\-\n ]/g,'').trim();
+  resEl.textContent = clean || 'No text found.';
+  document.getElementById('bar').style.width='0%';
 }
 </script>
 </body>

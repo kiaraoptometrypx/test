@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OCR with Crop & Enhanced Accuracy</title>
+<title>OCR with Touch Crop (Mobile Friendly)</title>
 <style>
 body {font-family:Arial, sans-serif; background:#f7f7f7; padding:40px; color:#333;}
 .container {
   max-width:720px; margin:auto; background:white; padding:25px 30px;
   border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.1);
 }
-canvas {max-width:100%; border:1px solid #ccc; border-radius:8px; cursor:crosshair;}
+canvas {max-width:100%; border:1px solid #ccc; border-radius:8px; touch-action:none;}
 button {
   background:#009879; color:white; border:none; padding:10px 16px;
   border-radius:6px; cursor:pointer; margin:8px 6px 0 0;
@@ -23,7 +23,7 @@ pre{white-space:pre-wrap; word-wrap:break-word; background:#fafafa; padding:15px
 </head>
 <body>
 <div class="container">
-  <h2>Image to Text (OCR) — Crop + Enhanced Accuracy</h2>
+  <h2>Image to Text (OCR) — Touch Crop + Enhanced Accuracy</h2>
   <input type="file" id="imageInput" accept="image/*"><br>
   <canvas id="canvas"></canvas><br>
   <button onclick="extractCropped()">Extract Cropped Text</button>
@@ -35,7 +35,7 @@ pre{white-space:pre-wrap; word-wrap:break-word; background:#fafafa; padding:15px
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-let img = new Image(), startX, startY, endX, endY, dragging=false;
+let img = new Image(), startX, startY, endX, endY, drawing = false;
 
 // === Load image ===
 document.getElementById('imageInput').addEventListener('change', e=>{
@@ -50,51 +50,68 @@ document.getElementById('imageInput').addEventListener('change', e=>{
   };
 });
 
-// === Crop rectangle ===
-canvas.addEventListener('mousedown', e=>{
-  const rect = canvas.getBoundingClientRect();
-  startX = e.clientX - rect.left;
-  startY = e.clientY - rect.top;
-  dragging = true;
+// === Draw crop area (mouse + touch) ===
+function startDraw(x, y){startX=x; startY=y; drawing=true;}
+function moveDraw(x, y){
+  if(!drawing) return;
+  endX=x; endY=y;
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  ctx.fillStyle='rgba(255,0,0,0.25)';
+  ctx.strokeStyle='red';
+  ctx.lineWidth=2;
+  const w=endX-startX, h=endY-startY;
+  ctx.fillRect(startX,startY,w,h);
+  ctx.strokeRect(startX,startY,w,h);
+}
+function endDraw(){drawing=false;}
+
+canvas.addEventListener('mousedown',e=>{
+  const r=canvas.getBoundingClientRect();
+  startDraw(e.clientX-r.left,e.clientY-r.top);
 });
-canvas.addEventListener('mousemove', e=>{
-  if(!dragging) return;
-  const rect = canvas.getBoundingClientRect();
-  endX = e.clientX - rect.left;
-  endY = e.clientY - rect.top;
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = 'red';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(startX, startY, endX-startX, endY-startY);
+canvas.addEventListener('mousemove',e=>{
+  const r=canvas.getBoundingClientRect();
+  moveDraw(e.clientX-r.left,e.clientY-r.top);
 });
-canvas.addEventListener('mouseup', ()=>dragging=false);
+canvas.addEventListener('mouseup',endDraw);
+
+canvas.addEventListener('touchstart',e=>{
+  const r=canvas.getBoundingClientRect();
+  const t=e.touches[0];
+  startDraw(t.clientX-r.left,t.clientY-r.top);
+});
+canvas.addEventListener('touchmove',e=>{
+  const r=canvas.getBoundingClientRect();
+  const t=e.touches[0];
+  moveDraw(t.clientX-r.left,t.clientY-r.top);
+});
+canvas.addEventListener('touchend',endDraw);
 
 // === OCR extraction ===
 async function extractCropped(){
   const resEl = document.getElementById('result');
-  if(!endX || !endY){alert('Draw a crop box first.'); return;}
+  if(endX==null||endY==null){alert('Draw a crop box first.');return;}
   resEl.textContent = 'Reading text... please wait.';
 
   // create cropped region
-  const w = Math.abs(endX - startX), h = Math.abs(endY - startY);
-  const x = Math.min(startX, endX), y = Math.min(startY, endY);
-  const crop = document.createElement('canvas');
-  crop.width = w; crop.height = h;
-  const cctx = crop.getContext('2d');
-  cctx.filter = 'contrast(150%) brightness(110%) grayscale(100%)';
-  cctx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+  const w=Math.abs(endX-startX), h=Math.abs(endY-startY);
+  const x=Math.min(startX,endX), y=Math.min(startY,endY);
+  const crop=document.createElement('canvas');
+  crop.width=w; crop.height=h;
+  const cctx=crop.getContext('2d');
+  cctx.filter='contrast(150%) brightness(110%) grayscale(100%)';
+  cctx.drawImage(canvas,x,y,w,h,0,0,w,h);
 
-  // OCR
-  const { data:{ text } } = await Tesseract.recognize(crop.toDataURL('image/png'), 'eng+osd', {
-    langPath: 'https://tessdata.projectnaptha.com/4.0.0_best/',
-    logger: info=>{
-      if(info.status === 'recognizing text'){
-        document.getElementById('bar').style.width = Math.round(info.progress*100)+'%';
+  const { data:{ text } } = await Tesseract.recognize(crop.toDataURL('image/png'),'eng+osd',{
+    langPath:'https://tessdata.projectnaptha.com/4.0.0_best/',
+    logger:info=>{
+      if(info.status==='recognizing text'){
+        document.getElementById('bar').style.width=Math.round(info.progress*100)+'%';
       }
     }
   });
-  let clean = text.replace(/[^A-Za-z0-9+.\-\n ]/g,'').trim();
-  resEl.textContent = clean || 'No text found.';
+  let clean=text.replace(/[^A-Za-z0-9+.\-\n ]/g,'').trim();
+  resEl.textContent=clean||'No text found.';
   document.getElementById('bar').style.width='0%';
 }
 </script>
